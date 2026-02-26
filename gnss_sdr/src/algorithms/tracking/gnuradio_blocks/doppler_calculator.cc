@@ -160,8 +160,8 @@ double SatelliteDopplerCalculator::getDopplerShift(const std::string& sat_id,
     SatelliteState state = interpolateSatelliteState(normalized_id, utc_time);
     
     if (!state.valid) {
-        std::cerr << "ERROR: No valid state for satellite " << normalized_id 
-                  << " at given time" << std::endl;
+        // std::cerr << "ERROR: No valid state for satellite " << normalized_id 
+        //           << " at given time" << std::endl;
         return 0.0;
     }
     

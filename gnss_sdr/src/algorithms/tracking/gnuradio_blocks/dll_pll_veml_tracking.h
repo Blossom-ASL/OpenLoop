@@ -209,6 +209,7 @@ private:
     uint64_t d_last_timetag_samplecounter;
     bool d_timetag_waiting;
     bool d_TOW_valid;
+    bool switch_openloop;
 
     float *d_prompt_data_shift;
     float d_rem_carr_phase_rad;

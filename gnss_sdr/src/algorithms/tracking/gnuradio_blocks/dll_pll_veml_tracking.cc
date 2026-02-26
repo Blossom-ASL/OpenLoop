@@ -187,7 +187,7 @@ dll_pll_veml_tracking::dll_pll_veml_tracking(const Dll_Pll_Conf &conf_)
 #endif
     try {
     init_doppler_calculator(
-        "/home/blossom/Desktop/RO/interpolationSP3/COD0OPSFIN_20241860000_01D_05M_ORB.SP3",  // UPDATE THIS PATH
+        "/home/blossom/Desktop/OpenLoop/interpolationSP3/COD0OPSRAP_20260550000_01D_05M_ORB.SP3",  // UPDATE THIS PATH
         8.546761,                      // Latitude (Bangalore example)
         76.904769,                      // Longitude
         10.0                         // Altitude (meters)
@@ -692,7 +692,7 @@ double dll_pll_veml_tracking::get_predicted_doppler() {
     
     // Convert current GPS time to UTC
     
-    std::tm utc_time = gpsTowToUTC(2321, d_TOW_at_current_symbol_s);
+    std::tm utc_time = gpsTowToUTC(2407, d_TOW_at_current_symbol_s);
     
     // Validate UTC time
     if (utc_time.tm_year < 0) {
@@ -810,6 +810,9 @@ void dll_pll_veml_tracking::start_tracking()
     d_carrier_doppler_hz = d_acq_carrier_doppler_hz;
     d_carrier_phase_step_rad = TWO_PI * d_carrier_doppler_hz / d_trk_parameters.fs_in;
     d_carrier_phase_rate_step_rad = 0.0;
+    switch_openloop = false;
+    //std::cout<<"-----------switch_openloop----------------"<<switch_openloop<<std::endl;
+
     ////////////////////////////////////////////////std::cout <<"d_trk_parameters.high_dyn is: "<<d_trk_parameters.high_dyn<<std::endl;
     d_carr_ph_history.clear();
     d_code_ph_history.clear();
@@ -1176,9 +1179,9 @@ bool dll_pll_veml_tracking::cn0_and_tracking_lock_status(double coh_integration_
                         }
                 }
         }
-    if (d_carrier_lock_fail_counter > d_trk_parameters.max_carrier_lock_fail or d_code_lock_fail_counter > d_trk_parameters.max_code_lock_fail)
+    if ((d_carrier_lock_fail_counter > d_trk_parameters.max_carrier_lock_fail or d_code_lock_fail_counter > d_trk_parameters.max_code_lock_fail))
         {
-            std::cout << "Loss of lock in channel " << d_channel << "!\n";
+            std::cout << "Loss of lock in channel " << d_channel << " !\n";
             LOG(INFO) << "Loss of lock in channel " << d_channel
                       << " (carrier_lock_fail_counter:" << d_carrier_lock_fail_counter
                       << " code_lock_fail_counter : " << d_code_lock_fail_counter << ")";
@@ -1320,22 +1323,7 @@ void dll_pll_veml_tracking::run_dll_pll()
     d_carrier_doppler_hz = d_carr_error_filt_hz;
     //d_carrier_doppler_hz = d_carrier_doppler_hz - 100.0;
     // New carrier Doppler frequency estimation
-    double doppler_external = 0.0;
-    if(d_TOW_valid)
-    {
-     doppler_external = get_predicted_doppler();
-     if(std::abs(doppler_external)>0.0 & std::abs(doppler_external)<6000)
-     {
-        //std::cout <<"External Doppler is " <<  d_carrier_doppler_hz- doppler_external << std::endl;
-        // d_carrier_loop_filter.initialize(static_cast<float>(0.0));  // initialize the carrier filter
-        // d_carr_error_filt_hz = d_carrier_loop_filter.get_carrier_error(0, static_cast<float>(d_carr_phase_error_hz), static_cast<float>(d_current_correlation_time_s));
-        // d_carrier_doppler_hz = doppler_external+d_carr_error_filt_hz;
-        d_carrier_doppler_hz_ED = doppler_external;
-        d_code_freq_chips_ED +=  d_carrier_doppler_hz_ED * d_code_chip_rate / d_signal_carrier_freq;
-        // d_carrier_doppler_hz = d_carrier_doppler_hz - random_offset;
-     }
 
-     }
    
 
     //    std::cout << "d_carrier_doppler_hz: " << d_carrier_doppler_hz << '\n';
@@ -1360,6 +1348,24 @@ void dll_pll_veml_tracking::run_dll_pll()
         {
             d_code_freq_chips += d_carrier_doppler_hz * d_code_chip_rate / d_signal_carrier_freq;
         }
+
+        double doppler_external = 0.0;
+    if(d_TOW_valid)
+    {
+     doppler_external = get_predicted_doppler();
+     if((std::abs(doppler_external)>0.0) & (std::abs(doppler_external)<6000))
+     {
+        //std::cout <<"External Doppler is " <<  d_carrier_doppler_hz- doppler_external << std::endl;
+        // d_carrier_loop_filter.initialize(static_cast<float>(0.0));  // initialize the carrier filter
+        // d_carr_error_filt_hz = d_carrier_loop_filter.get_carrier_error(0, static_cast<float>(d_carr_phase_error_hz), static_cast<float>(d_current_correlation_time_s));
+        // d_carrier_doppler_hz = doppler_external+d_carr_error_filt_hz;
+        d_carrier_doppler_hz_ED = doppler_external;
+        d_code_freq_chips_ED = d_code_chip_rate - d_code_error_filt_chips;        
+        d_code_freq_chips_ED +=  d_carrier_doppler_hz_ED * d_code_chip_rate / d_signal_carrier_freq;
+        // d_carrier_doppler_hz = d_carrier_doppler_hz - random_offset;
+     }
+
+     }
 
     // Experimental: detect Carrier Doppler vs. Code Doppler incoherence and correct the Carrier Doppler
     if (d_trk_parameters.enable_doppler_correction == true)
@@ -2015,7 +2021,7 @@ std::tm dll_pll_veml_tracking::gpsTowToUTC(int gps_week, double tow_sec)
 
     // Convert to UTC
     std::tm *utc_tm = gmtime(&gps_time);
-    std::tm result = {};  // Initialize
+    std::tm result = {};  // Initialize 
     if (utc_tm != nullptr) {
         result = *utc_tm;  // Safe copy
     } else {
@@ -2118,6 +2124,7 @@ int dll_pll_veml_tracking::general_work(int noutput_items __attribute__((unused)
                 // Check lock status
                 if (!cn0_and_tracking_lock_status(d_code_period))
                     {
+                        //std::cout <<"switch_openloop is " <<switch_openloop<<std::endl;
                         clear_tracking_vars();
                         d_state = 0;                                         // loss-of-lock detected
                         loss_of_lock = true;                                 // Set the flag so that the negative indication can be generated
@@ -2234,30 +2241,25 @@ int dll_pll_veml_tracking::general_work(int noutput_items __attribute__((unused)
             }
         case 3:  // coherent integration (correlation time extension)
             {
-                // perform a correlation step
-                //std::cout<<"In case 3"<<std::endl;
-                if(std::abs(d_carrier_doppler_hz_ED)>0 & std::abs(d_carrier_doppler_hz_ED)<5000 )
+                if((std::abs(d_carrier_doppler_hz_ED)>0) & (std::abs(d_carrier_doppler_hz_ED)<5000 ) &(d_CN0_SNV_dB_Hz<10.0))
+                //if((std::abs(d_carrier_doppler_hz_ED)>0) & (std::abs(d_carrier_doppler_hz_ED)<5000))
+
                 {
-
-                    //std::cout <<"Here on Open Loop" <<std::endl;
-                    do_correlation_step(in);
-                    // update_tracking_vars_ED();
-                    // std::cout <<"d_carrier_doppler_hz : "<<d_carrier_doppler_hz <<" "<<d_carrier_doppler_hz_ED<<std::endl;
-                    // std::cout <<"d_code_freq_chips: "<<d_code_freq_chips <<" "<<d_code_freq_chips_ED<<std::endl; 
-                    // std::cout <<"d_T_chip_seconds: "<<d_T_chip_seconds <<" "<<d_T_chip_seconds_ED<<std::endl; 
-                    // std::cout <<"d_T_prn_samples: "<<d_T_prn_samples <<" "<<d_T_prn_samples<<std::endl; 
-                    // std::cout <<"d_K_blk_samples: "<<d_K_blk_samples <<" "<<d_K_blk_samples_ED<<std::endl; 
-                    // std::cout <<"d_current_prn_length_samples: "<<d_current_prn_length_samples <<" "<<d_current_prn_length_samples_ED<<std::endl; 
-                    // std::cout <<"d_carrier_phase_step_rad: "<<d_carrier_phase_step_rad <<" "<<d_carrier_phase_step_rad_ED<<std::endl; 
-                    // std::cout <<"d_code_phase_step_chips: "<<d_code_phase_step_chips <<" "<<d_code_phase_step_chips_ED<<std::endl; 
-                    // std::cout <<"d_rem_code_phase_samples: "<<d_rem_code_phase_samples <<" "<<d_rem_code_phase_samples_ED<<std::endl; 
-                    // std::cout <<"d_rem_code_phase_chips: "<<d_rem_code_phase_chips <<" "<<d_rem_code_phase_chips_ED<<std::endl; 
-
-
+                    //std::cout<<switch_openloop<<std::endl;
+                    if(!switch_openloop)
+                    {
+                        switch_openloop = true;
+                    }
+                        do_correlation_step_ED(in);
                 }
                 else
                 {
                     //std::cout <<"Here on Closed loop" <<std::endl;
+                    if(switch_openloop)
+                    {
+                        switch_openloop = false;
+
+                    }
                     do_correlation_step(in);
                 }
                 
@@ -2297,9 +2299,32 @@ int dll_pll_veml_tracking::general_work(int noutput_items __attribute__((unused)
             }
         case 4:  // narrow tracking
             {
-                //std::cout<<"In case 4"<<std::endl;
-                // perform a correlation step
-                do_correlation_step(in);
+                if((std::abs(d_carrier_doppler_hz_ED)>0) & (std::abs(d_carrier_doppler_hz_ED)<5000)&(d_CN0_SNV_dB_Hz<40.0))
+                //if((std::abs(d_carrier_doppler_hz_ED)>0) & (std::abs(d_carrier_doppler_hz_ED)<5000))
+                {
+
+                    if(!switch_openloop)
+                    {
+                        switch_openloop = true;
+                        std::cout<<"Open loop started--------"<<switch_openloop<<std::endl;
+                        d_rem_code_phase_samples_ED = d_rem_code_phase_samples;
+
+                    }
+                    do_correlation_step_ED(in);
+                }
+                else
+                {
+                         if(switch_openloop)
+                    {
+                        d_rem_code_phase_samples = d_rem_code_phase_samples_ED;
+                        switch_openloop = false;
+
+                    }
+                    do_correlation_step(in);
+                    // d_code_freq_chips_ED = d_code_freq_chips;
+                    // d_rem_code_phase_samples_ED = d_rem_code_phase_samples;
+
+                }
                 //do_correlation_step_ED(in);
                 save_correlation_results();
 
